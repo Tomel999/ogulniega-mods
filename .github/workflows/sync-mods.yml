@@ -22,7 +22,7 @@ jobs:
 
       - run: python scripts/sync_mods.py
 
-- name: Commit changes
+      - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
