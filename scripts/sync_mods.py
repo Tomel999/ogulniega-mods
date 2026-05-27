@@ -18,9 +18,9 @@ def sync_mod(url, dest):
         remote_size = int(head.headers.get("content-length", -1))
         if remote_size > MAX_SIZE:
             print(f"  skip (za duży: {remote_size // 1024 // 1024} MB)")
-            return False
+            return "too_big"
         if dest.exists() and remote_size == dest.stat().st_size:
-            return False
+            return "same"
     except Exception:
         pass
 
@@ -30,11 +30,23 @@ def sync_mod(url, dest):
     with open(dest, "wb") as f:
         for chunk in r.iter_content(8192):
             f.write(chunk)
-    return True
+    return "downloaded"
 
 
 launcher = fetch_json(LAUNCHER_URL)
 versions = launcher.get("versions", [])
+
+active_versions = {v["name"] for v in versions}
+
+versions_dir = Path("versions")
+
+if versions_dir.exists():
+    for folder in versions_dir.iterdir():
+        if folder.is_dir() and folder.name not in active_versions:
+            print(f"removing old version: {folder.name}")
+            for f in folder.iterdir():
+                f.unlink()
+            folder.rmdir()
 
 for version in versions:
     name = version["name"]
@@ -46,11 +58,25 @@ for version in versions:
         print(f"  skip: {e}")
         continue
 
-    for mod in data.get("mods", []):
-        dest = Path("versions") / name / mod["name"]
+    mods = data.get("mods", [])
+    expected_files = {mod["name"] for mod in mods}
+    version_dir = versions_dir / name
+
+    if version_dir.exists():
+        for existing in version_dir.iterdir():
+            if existing.name not in expected_files:
+                print(f"  remove {existing.name}")
+                existing.unlink()
+
+    for mod in mods:
+        dest = version_dir / mod["name"]
         try:
-            changed = sync_mod(mod["url"], dest)
-            if changed is not False:
-                print(f"  {'new' if changed else 'ok '} {mod['name']}")
+            result = sync_mod(mod["url"], dest)
+            if result == "downloaded":
+                print(f"  new  {mod['name']}")
+            elif result == "same":
+                print(f"  ok   {mod['name']}")
+            elif result == "too_big":
+                pass
         except Exception as e:
-            print(f"  err {mod['name']}: {e}")
+            print(f"  err  {mod['name']}: {e}")
